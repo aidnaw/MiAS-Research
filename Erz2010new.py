@@ -190,8 +190,25 @@ class ManeuverData:
                 separation_right = separation
                 separation_straight_right = separation_straight
             else:
-                separation_left = separation
-                separation_straight_left = separation_straight
+                separation_left = separation[::-1]
+                separation_straight_left = separation_straight[::-1]
+               
+
+            # Plot turn data
+            # plt.plot(turn_angles, separation)
+            # plt.title('A {} B Straight'.format(direction))
+            # plt.ylabel('Separation (m)')
+            # plt.xlabel('Turn Angle (rad)')
+            # plt.grid()
+
+            # # Plot straight line data
+            # separation_straight = []
+            # #if d_tmin >= self.d_req:
+            # for turn_angle in turn_angles:
+            #     # if null maneuver separtaion != 0 
+            #     separation_straight.append(self.get_d_smin(turn_angle, 0))
+            # plt.plot(turn_angles, separation_straight)
+            # plt.show()
 
             # Plot full turn
             # ax, ay, bx, by = [], [], [], []
@@ -217,8 +234,8 @@ class ManeuverData:
             print('turn_time_min', turn_time_min/60)
 
         # Plot turn data
-        separation = np.array(separation_left + separation_right[1:]) / 1852
-        separation_straight = np.array(separation_straight_left + separation_straight_right[1:]) / 1852
+        separation = np.array(separation_left + separation_right[1::]) / 1852
+        separation_straight = np.array(separation_straight_left + separation_straight_right[1::]) / 1852
         turn_angles = np.arange(-148,150,2)
         plt.plot(turn_angles, separation)
         plt.plot(turn_angles, separation_straight)

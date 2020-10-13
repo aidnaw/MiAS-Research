@@ -26,7 +26,7 @@ class MainAircraft:
             self.turn_radius = np.inf
 
     def turn_angle_(self, t):
-    # (3) returns turn angle if craft were to turn for t seconds
+    #  returns turn angle if craft were to turn for t seconds (3)
         turn_angle = t*MainAircraft.g*np.tan(self.bank_angle)/self.airspeed
         return turn_angle
 
@@ -186,6 +186,7 @@ class ManeuverData:
             for turn_angle in turn_angles:
                 separation_straight.append(self.get_d_smin(turn_angle, 0))
 
+            # Prep plot data
             if i == 0:
                 separation_right = separation
                 separation_straight_right = separation_straight
@@ -233,7 +234,7 @@ class ManeuverData:
             print('turn_angle_min', np.rad2deg(turn_angle_min))
             print('turn_time_min', turn_time_min/60)
 
-        # Plot turn data
+        # Plot maneuver data
         separation = np.array(separation_left + separation_right[1::]) / 1852
         separation_straight = np.array(separation_straight_left + separation_straight_right[1::]) / 1852
         turn_angles = np.arange(-148,150,2)
@@ -265,38 +266,43 @@ class ManeuverData:
             d_tmin = separation[index]
             turn_angle_min = turn_angles[index]
             turn_time_min = self.b.time_to_turn(turn_angle_min)
-            
-            # Plot turn data
-            plt.plot(turn_angles, separation)
-            plt.title('A straight B {}'.format(direction))
-            plt.ylabel('Separation (m)')
-            plt.xlabel('Turn Angle (rad)')
-            plt.grid()
 
-            # Plot straight line data
             separation_straight = []
-            #if d_tmin >= self.d_req:
             for turn_angle in turn_angles:
-                # if null maneuver separtaion != 0 
                 separation_straight.append(self.get_d_smin(0, turn_angle))
-            plt.plot(turn_angles, separation_straight)
-            plt.show()
+
+            # Prep plot data
+            if i == 0:
+                separation_right = separation
+                separation_straight_right = separation_straight
+            else:
+                separation_left = separation[::-1]
+                separation_straight_left = separation_straight[::-1]
+            
+            # # Plot maneuver data
+            # plt.plot(turn_angles, separation)
+            # plt.title('A straight B {}'.format(direction))
+            # plt.ylabel('Separation (m)')
+            # plt.xlabel('Turn Angle (rad)')
+            # plt.grid()
+            # plt.plot(turn_angles, separation_straight)
+            # plt.show()
 
             # Plot full turn
-            ax, ay, bx, by = [], [], [], []
-            for turn_angle in turn_angles:
-                p_b = self.b.turn_position(self.b.time_to_turn(turn_angle))
-                bx.append(p_b[0])
-                by.append(p_b[1])
-                p_a = [0, self.a.initial_position + self.a.airspeed * self.b.time_to_turn(turn_angle)]
-                ax.append(p_a[0])
-                ay.append(p_a[1])
-            plt.plot(ax, ay)
-            plt.plot(bx, by)
-            plt.grid()
-            plt.gca().set_aspect("equal")
-            plt.title('Manuever w/ full turn')
-            plt.show()
+            # ax, ay, bx, by = [], [], [], []
+            # for turn_angle in turn_angles:
+            #     p_b = self.b.turn_position(self.b.time_to_turn(turn_angle))
+            #     bx.append(p_b[0])
+            #     by.append(p_b[1])
+            #     p_a = [0, self.a.initial_position + self.a.airspeed * self.b.time_to_turn(turn_angle)]
+            #     ax.append(p_a[0])
+            #     ay.append(p_a[1])
+            # plt.plot(ax, ay)
+            # plt.plot(bx, by)
+            # plt.grid()
+            # plt.gca().set_aspect("equal")
+            # plt.title('Manuever w/ full turn')
+            # plt.show()
 
             # Print turn data
             print('A straight B {}'.format(direction))
@@ -305,6 +311,17 @@ class ManeuverData:
             print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
             print('\t\tTime (min):', round(turn_time_min/60, 2))
 
+        # Plot maneuver data
+        separation = np.array(separation_left + separation_right[1::]) / 1852
+        separation_straight = np.array(separation_straight_left + separation_straight_right[1::]) / 1852
+        turn_angles = np.arange(-148,150,2)
+        plt.plot(turn_angles, separation)
+        plt.plot(turn_angles, separation_straight)
+        plt.title('A turns B straight'.format(direction))
+        plt.ylabel('Separation (nm)')
+        plt.xlabel('Turn Angle (deg)')
+        plt.grid()
+        plt.show()
             
 
     def A_turns_B_right(self):
@@ -444,7 +461,7 @@ def erz_2010_test_case_():
     # Create conflicting aircraft with set velocity, relative position, and relative heading
     b_speed = 480 # knots
     b_position = np.array([12, 12.5]) # nmi
-    b_heading = np.deg2rad(270)
+    b_heading = np.deg2rad(270) # deg
 
     b_speed_mks = b_speed * 0.514 # m/s
     b_position_mks = b_position * 1852 # m
@@ -454,10 +471,10 @@ def erz_2010_test_case_():
     data = ManeuverData(aircraft_a, aircraft_b)
 
     # Testing for A turns B straight standard maneuver
-    data.A_turns_B_straight(15) # (TURN DATA WORKING)
+    # data.A_turns_B_straight(15) # (TURN DATA WORKING)
 
     # Testing for A straight B turns standard maneuver 
-    # data.A_straight_B_turns(15) # (TURN DATA WORKING)
+    data.A_straight_B_turns(15) # (TURN DATA WORKING)
 
     # Testing for A turns B straight expedited maneuver
     # data.A_turns_B_straight(30) # (TURN DATA WORKING)

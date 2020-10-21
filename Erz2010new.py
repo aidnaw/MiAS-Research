@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import signal
 import matplotlib.pyplot as plt
 
 
@@ -56,7 +57,7 @@ class ConflictingCraft(MainAircraft):
     #### Function for position vectors from origin to aircraft while in turn
 
     def turn_position(self, t): 
-    # Returns position vector wrt origin at t seconds while in turn (8) (TESTED)
+    # Returns position vector wrt origin at t seconds while in turn (8)
         R = self.turn_radius
         dphi = self.turn_angle_(t)
         heading0 = self.initial_heading
@@ -74,7 +75,7 @@ class ManeuverData:
     #### Functions for turn segment ####
 
     def get_da(self,t): 
-    # turn separation if only A turns (10) (VERIFIED)
+    # turn separation if only A turns (10) (WORKING)
         R = self.a.turn_radius
         dphi = self.a.turn_angle_(t)
         heading0 = self.b.initial_heading
@@ -85,7 +86,7 @@ class ManeuverData:
         return da
 
     def get_db(self,t): 
-    # turn separation if only B turns (11) (VERIFIED)
+    # turn separation if only B turns (11) (WORKING)
         R = self.b.turn_radius
         dphi = self.b.turn_angle_(t)
         heading0 = self.b.initial_heading
@@ -96,7 +97,7 @@ class ManeuverData:
         return db
 
     def get_dab(self, t):
-    # turn separation in cooperative maneuver (13) (VERIFIED)
+    # turn separation in cooperative maneuver (13) (WORKING)
         R_b = self.b.turn_radius
         dphi_b = self.b.turn_angle_(t)
         R_a = self.a.turn_radius
@@ -122,11 +123,13 @@ class ManeuverData:
             else:
                 p_a1 = self.a.turn_position(self.a.time_to_turn(turn_angle_a))
             if turn_angle_b == 0:
-                p_b1 = np.array([0, self.b.airspeed*self.a.time_to_turn(turn_angle_a)])
+                p_b1 = np.array([self.b.initial_position[0] + self.b.airspeed*np.sin(self.b.initial_heading)*self.a.time_to_turn(turn_angle_a),
+                         self.b.initial_position[1] + self.b.airspeed*np.cos(self.b.initial_heading)*self.a.time_to_turn(turn_angle_a)])
             else:
                 p_b1 = self.b.turn_position(self.b.time_to_turn(turn_angle_b))
+
         dx1 = p_b1[0] - p_a1[0]
-        dy1 = p_b1[1] - p_b1[1]
+        dy1 = p_b1[1] - p_a1[1]
         heading_a = turn_angle_a
         heading_b = turn_angle_b + self.b.initial_heading
         Vrx = self.b.airspeed*np.sin(heading_b) - self.a.airspeed*np.sin(heading_a)
@@ -156,9 +159,11 @@ class ManeuverData:
         heading_b = turn_angle_b + self.b.initial_heading
         Vrx = self.b.airspeed*np.sin(heading_b) - self.a.airspeed*np.sin(heading_a)
         Vry = self.b.airspeed*np.cos(heading_b) - self.a.airspeed*np.cos(heading_a)
-        d_smin = np.sqrt( (dx1 - Vrx*((dx1*Vrx + dy1*Vry)/(Vrx**2 + Vry**2)))**2 
-                        + (dy1 - Vry*((dx1*Vrx + dy1*Vry)/(Vrx**2 + Vry**2)))**2 )
+        d_smin = np.sqrt( (dx1 - Vrx*(dx1*Vrx + dy1*Vry)/(Vrx**2 + Vry**2))**2 
+                        + (dy1 - Vry*(dx1*Vrx + dy1*Vry)/(Vrx**2 + Vry**2))**2 )
         return d_smin
+
+    #### Table data and plot for each maneuver type ####
 
     def A_turns_B_straight(self, bank_angle):
         for i in range(2):
@@ -172,7 +177,7 @@ class ManeuverData:
             
             self.a.bank_angle_(np.deg2rad(bank_angle))
 
-            # Find minimum turn separation, corresponding time and turn angle
+            # Find minimum turn separation, corresponding time, and turn angle
             separation = []
             for turn_angle in turn_angles:
                 separation.append(self.get_da(self.a.time_to_turn(turn_angle)))
@@ -181,66 +186,87 @@ class ManeuverData:
             turn_angle_min = turn_angles[index]
             turn_time_min = self.a.time_to_turn(turn_angle_min)
 
-            # Find straight line separations
+            # Find time to minimum separation in straight line followed by minimum separation
+            t_smin = []
             separation_straight = []
-            for turn_angle in turn_angles:
+            for j, turn_angle in enumerate(turn_angles):
+                t_smin.append(self.get_t_smin(turn_angle,0))
                 separation_straight.append(self.get_d_smin(turn_angle, 0))
+                # Plots meet at min turn separation
+                if  j > index: 
+                    separation_straight[-1] = separation[j] 
 
-            # Prep plot data
+            # Find time to get to min separation overall w/ specified turn angle
+            turn_times = []
+            for turn_angle in turn_angles:
+                turn_times.append(self.a.time_to_turn(turn_angle))
+            resolution_times = []
+            for [j, turn_time] in enumerate(turn_times):
+                if t_smin[j] >= 0:
+                    resolution_times.append(turn_time + t_smin[j])
+                else:
+                    resolution_times.append(turn_time)
+
+            #### FIND RESOLUTION DATA ####
+
+            # Get indices for local minima and maxima of straight line separation
+            maxima = signal.argrelmax(np.array(separation_straight))
+            minima = signal.argrelmin(np.array(separation_straight))
+
+            # Isolate and incorporate flat maximum at min turn angle
+            maxima = maxima[0]
+            if not maxima:
+                maxima = np.array([index])
+                print(maxima)
+            else:
+                maxima = np.array([maxima, index])
+            minima = minima[0]
+
+            # Start algorithm on page 235
+            if separation_straight[1] < separation_straight[0]:
+                if turn_angles[minima[0]] == turn_angle_min:
+                    resolution_type = 'Failed'
+            if maxima[0] < index:
+                if separation_straight[maxima[0]] >= self.d_req:
+                    resolution_separation = min(i for i in separation_straight if i > self.d_req)
+
+
+            # Print turn data
+
+            # print('A {} B straight'.format(direction))
+            # print('\tMinimum Separation in Turn:')
+            # print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
+            # print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
+            # print('\t\tTime (min):', round(turn_time_min/60, 2))
+
+            # Print resolution data
+
+            # print('\tResolution Parameters:')
+            # print('\t\tResolution Type', resolution_type)
+            # print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
+            # print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
+            # print('\t\tResolution Time (min):', round(resolution_time/60, 2))
+
+             # Prep plot data
             if i == 0:
                 separation_right = separation
                 separation_straight_right = separation_straight
+                resolution_times_right = resolution_times
             else:
                 separation_left = separation[::-1]
                 separation_straight_left = separation_straight[::-1]
-               
+                resolution_times_left = resolution_times[::-1]
 
-            # Plot turn data
-            # plt.plot(turn_angles, separation)
-            # plt.title('A {} B Straight'.format(direction))
-            # plt.ylabel('Separation (m)')
-            # plt.xlabel('Turn Angle (rad)')
-            # plt.grid()
-
-            # # Plot straight line data
-            # separation_straight = []
-            # #if d_tmin >= self.d_req:
-            # for turn_angle in turn_angles:
-            #     # if null maneuver separtaion != 0 
-            #     separation_straight.append(self.get_d_smin(turn_angle, 0))
-            # plt.plot(turn_angles, separation_straight)
-            # plt.show()
-
-            # Plot full turn
-            # ax, ay, bx, by = [], [], [], []
-            # for turn_angle in turn_angles:
-            #     p_a = self.a.turn_position(self.a.time_to_turn(turn_angle))
-            #     ax.append(p_a[0])
-            #     ay.append(p_a[1])
-            #     p_b = [self.b.initial_position[0] + self.b.airspeed*np.sin(self.b.initial_heading)*self.a.time_to_turn(turn_angle),
-            #              self.b.initial_position[1] + self.b.airspeed*np.cos(self.b.initial_heading)*self.a.time_to_turn(turn_angle)]
-            #     bx.append(p_b[0])
-            #     by.append(p_b[1])
-            # plt.plot(ax, ay)
-            # plt.plot(bx, by)
-            # plt.grid()
-            # plt.gca().set_aspect("equal")
-            # plt.title('Manuever w/ full turn')
-            # plt.show()
-
-            # Print turn data
-            print('A {} B straight'.format(direction))
-            print('d_tmin', d_tmin/1852)
-            print('turn_angle_min', np.rad2deg(turn_angle_min))
-            print('turn_time_min', turn_time_min/60)
 
         # Plot maneuver data
         separation = np.array(separation_left + separation_right[1::]) / 1852
         separation_straight = np.array(separation_straight_left + separation_straight_right[1::]) / 1852
+        resolution_times = np.array(resolution_times_left + resolution_times_right[1::])
         turn_angles = np.arange(-148,150,2)
         plt.plot(turn_angles, separation)
         plt.plot(turn_angles, separation_straight)
-        plt.title('A turns B straight'.format(direction))
+        plt.plot(turn_angles, np.array(resolution_times)/60)
+        plt.title('A turns B straight')
         plt.ylabel('Separation (nm)')
         plt.xlabel('Turn Angle (deg)')
         plt.grid()
@@ -267,62 +293,75 @@ class ManeuverData:
             turn_angle_min = turn_angles[index]
             turn_time_min = self.b.time_to_turn(turn_angle_min)
 
+            # Find time to minimum separation in straight line followed by minimum separation
+            t_smin = []
             separation_straight = []
-            for turn_angle in turn_angles:
+            for j, turn_angle in enumerate(turn_angles):
+                t_smin.append(self.get_t_smin(0, turn_angle))
                 separation_straight.append(self.get_d_smin(0, turn_angle))
+                # Plots meet at min turn separation
+                if  j > index: 
+                    separation_straight[-1] = separation[j]
 
+            # Find time to get to min separation w/ specified turn angle
+            turn_times = []
+            for turn_angle in turn_angles:
+                turn_times.append(self.b.time_to_turn(turn_angle))
+            resolution_times = []
+            for [j, turn_time] in enumerate(turn_times):
+                if t_smin[j] >= 0:
+                    resolution_times.append(turn_time + t_smin[j])
+                else:
+                    resolution_times.append(turn_time)
+
+            # Find time to get to min separation overall w/ specified turn angle
+            turn_times = []
+            for turn_angle in turn_angles:
+                turn_times.append(self.b.time_to_turn(turn_angle))
+            resolution_times = []
+            for [j, turn_time] in enumerate(turn_times):
+                if t_smin[j] >= 0:
+                    resolution_times.append(turn_time + t_smin[j])
+                else:
+                    resolution_times.append(turn_time)
+
+           
             # Prep plot data
             if i == 0:
                 separation_right = separation
                 separation_straight_right = separation_straight
+                resolution_times_right = resolution_times
             else:
                 separation_left = separation[::-1]
                 separation_straight_left = separation_straight[::-1]
+                resolution_times_left = resolution_times[::-1]
             
-            # # Plot maneuver data
-            # plt.plot(turn_angles, separation)
-            # plt.title('A straight B {}'.format(direction))
-            # plt.ylabel('Separation (m)')
-            # plt.xlabel('Turn Angle (rad)')
-            # plt.grid()
-            # plt.plot(turn_angles, separation_straight)
-            # plt.show()
-
-            # Plot full turn
-            # ax, ay, bx, by = [], [], [], []
-            # for turn_angle in turn_angles:
-            #     p_b = self.b.turn_position(self.b.time_to_turn(turn_angle))
-            #     bx.append(p_b[0])
-            #     by.append(p_b[1])
-            #     p_a = [0, self.a.initial_position + self.a.airspeed * self.b.time_to_turn(turn_angle)]
-            #     ax.append(p_a[0])
-            #     ay.append(p_a[1])
-            # plt.plot(ax, ay)
-            # plt.plot(bx, by)
-            # plt.grid()
-            # plt.gca().set_aspect("equal")
-            # plt.title('Manuever w/ full turn')
-            # plt.show()
-
             # Print turn data
-            print('A straight B {}'.format(direction))
-            print('\tMinimum Separation in Turn:')
-            print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
-            print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
-            print('\t\tTime (min):', round(turn_time_min/60, 2))
+            # print('A straight B {}'.format(direction))
+            # print('\tMinimum Separation in Turn:')
+            # print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
+            # print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
+            # print('\t\tTime (min):', round(turn_time_min/60, 2))
+
+            # print('\tResolution Parameters:')
+            # print('\t\tResolution Type', resolution_type)
+            # print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
+            # print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
+            # print('\t\tTime (min):', round(resolution_time/60, 2))
 
         # Plot maneuver data
         separation = np.array(separation_left + separation_right[1::]) / 1852
         separation_straight = np.array(separation_straight_left + separation_straight_right[1::]) / 1852
+        resolution_times = np.array(resolution_times_left + resolution_times_right[1::])
         turn_angles = np.arange(-148,150,2)
         plt.plot(turn_angles, separation)
         plt.plot(turn_angles, separation_straight)
-        plt.title('A turns B straight'.format(direction))
+        plt.plot(turn_angles, np.array(resolution_times)/60)
+        plt.title('A straight B turns')
         plt.ylabel('Separation (nm)')
         plt.xlabel('Turn Angle (deg)')
         plt.grid()
-        plt.show()
-            
+        plt.show()        
 
     def A_turns_B_right(self):
         bank_angle = 30
@@ -348,44 +387,63 @@ class ManeuverData:
             turn_angle_min = turn_angles[index]
             turn_time_min = self.a.time_to_turn(turn_angle_min)
             
-            # Plot turn data
-            plt.plot(turn_angles, separation)
-            plt.title('A {} B right'.format(direction))
-            plt.ylabel('Separation (m)')
-            plt.xlabel('Turn Angle (rad)')
-            plt.grid()
-            
-            # Plot straight line data
+           # Find time to minimum separation in straight line, followed by minimum separation
+            t_smin = []
             separation_straight = []
-            #if d_tmin >= self.d_req:
-            for turn_angle in turn_angles:
-                # if null maneuver separtaion != 0 
+            for j, turn_angle in enumerate(turn_angles):
+                t_smin.append(self.get_t_smin(turn_angle, self.b.turn_angle_(self.a.time_to_turn(turn_angle))))
                 separation_straight.append(self.get_d_smin(turn_angle, self.b.turn_angle_(self.a.time_to_turn(turn_angle))))
-            plt.plot(turn_angles, separation_straight)
-            plt.show()
+                # Plots meet at min turn separation
+                if  j > index: 
+                    separation_straight[-1] = separation[j]
 
-            # Plot full turn
-            ax, ay, bx, by = [], [], [], []
+            # Find time to get to min separation overall w/ specified turn angle
+            turn_times = []
             for turn_angle in turn_angles:
-                p_a = self.a.turn_position(self.a.time_to_turn(turn_angle))
-                ax.append(p_a[0])
-                ay.append(p_a[1])
-                p_b = self.b.turn_position(self.a.time_to_turn(turn_angle))
-                bx.append(p_b[0])
-                by.append(p_b[1])
-            plt.plot(ax, ay)
-            plt.plot(bx, by)
-            plt.grid()
-            plt.gca().set_aspect("equal")
-            plt.title('Manuever w/ full turn')
-            plt.show()
+                turn_times.append(self.a.time_to_turn(turn_angle))
+            resolution_times = []
+            for [j, turn_time] in enumerate(turn_times):
+                if t_smin[j] >= 0:
+                    resolution_times.append(turn_time + t_smin[j])
+                else:
+                    resolution_times.append(turn_time)
+
+            # Prep plot data
+            if i == 0:
+                separation_right = separation
+                separation_straight_right = separation_straight
+                resolution_times_right = resolution_times
+            else:
+                separation_left = separation[::-1]
+                separation_straight_left = separation_straight[::-1]
+                resolution_times_left = resolution_times[::-1]
 
             # Print turn data
-            print('A {} B right'.format(direction))
-            print('\tMinimum Separation in Turn:')
-            print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
-            print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
-            print('\t\tTime (min):', round(turn_time_min/60, 2))
+            # print('A {} B right'.format(direction))
+            # print('\tMinimum Separation in Turn:')
+            # print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
+            # print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
+            # print('\t\tTime (min):', round(turn_time_min/60, 2))
+
+            # print('\tResolution Parameters:')
+            # print('\t\tResolution Type', resolution_type)
+            # print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
+            # print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
+            # print('\t\tTime (min):', round(resolution_time/60, 2))
+
+        # Plot maneuver data
+        separation = np.array(separation_left + separation_right[1::]) / 1852
+        separation_straight = np.array(separation_straight_left + separation_straight_right[1::]) / 1852
+        resolution_times = np.array(resolution_times_left + resolution_times_right[1::])
+        turn_angles = np.arange(-148,150,2)
+        plt.plot(turn_angles, separation)
+        plt.plot(turn_angles, separation_straight)
+        plt.plot(turn_angles, np.array(resolution_times)/60)
+        plt.title('A turns B right')
+        plt.ylabel('Separation (nm)')
+        plt.xlabel('Turn Angle (deg)')
+        plt.grid()
+        plt.show() 
 
     def A_turns_B_left(self):
         bank_angle = 30
@@ -411,44 +469,63 @@ class ManeuverData:
             turn_angle_min = turn_angles[index]
             turn_time_min = self.a.time_to_turn(turn_angle_min)
             
-            # Plot turn data
-            plt.plot(turn_angles, separation)
-            plt.title('A {} B left'.format(direction))
-            plt.ylabel('Separation (m)')
-            plt.xlabel('Turn Angle (rad)')
-            plt.grid()
-            
-            # Plot straight line data
+            # Find time to minimum separation in straight line followed by minimum separation
+            t_smin = []
             separation_straight = []
-            #if d_tmin >= self.d_req:
-            for turn_angle in turn_angles:
-                # if null maneuver separtaion != 0 
+            for j, turn_angle in enumerate(turn_angles):
+                t_smin.append(self.get_t_smin(turn_angle, self.b.turn_angle_(self.a.time_to_turn(turn_angle))))
                 separation_straight.append(self.get_d_smin(turn_angle, self.b.turn_angle_(self.a.time_to_turn(turn_angle))))
-            plt.plot(turn_angles, separation_straight)
-            plt.show()
+                # Plots meet at min turn separation
+                if  j > index: 
+                    separation_straight[-1] = separation[j]
 
-            # Plot full turn
-            ax, ay, bx, by = [], [], [], []
+            # Find time to get to min separation overall w/ specified turn angle
+            turn_times = []
             for turn_angle in turn_angles:
-                p_a = self.a.turn_position(self.a.time_to_turn(turn_angle))
-                ax.append(p_a[0])
-                ay.append(p_a[1])
-                p_b = self.b.turn_position(self.a.time_to_turn(turn_angle))
-                bx.append(p_b[0])
-                by.append(p_b[1])
-            plt.plot(ax, ay)
-            plt.plot(bx, by)
-            plt.grid()
-            plt.gca().set_aspect("equal")
-            plt.title('Manuever w/ full turn')
-            plt.show()
+                turn_times.append(self.a.time_to_turn(turn_angle))
+            resolution_times = []
+            for [j, turn_time] in enumerate(turn_times):
+                if t_smin[j] >= 0:
+                    resolution_times.append(turn_time + t_smin[j])
+                else:
+                    resolution_times.append(turn_time)
 
+            # Prep plot data
+            if i == 0:
+                separation_right = separation
+                separation_straight_right = separation_straight
+                resolution_times_right = resolution_times
+            else:
+                separation_left = separation[::-1]
+                separation_straight_left = separation_straight[::-1]
+                resolution_times_left = resolution_times[::-1]
+            
             # Print turn data
-            print('A {} B left'.format(direction))
-            print('\tMinimum Separation in Turn:')
-            print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
-            print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
-            print('\t\tTime (min):', round(turn_time_min/60, 2))
+            # print('A {} B left'.format(direction))
+            # print('\tMinimum Separation in Turn:')
+            # print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
+            # print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
+            # print('\t\tTime (min):', round(turn_time_min/60, 2))
+
+            # print('\tResolution Parameters:')
+            # print('\t\tResolution Type', resolution_type)
+            # print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
+            # print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
+            # print('\t\tTime (min):', round(resolution_time/60, 2))
+
+        # Plot maneuver data
+        separation = np.array(separation_left + separation_right[1::]) / 1852
+        separation_straight = np.array(separation_straight_left + separation_straight_right[1::]) / 1852
+        resolution_times = np.array(resolution_times_left + resolution_times_right[1::])
+        turn_angles = np.arange(-148,150,2)
+        plt.plot(turn_angles, separation)
+        plt.plot(turn_angles, separation_straight)
+        plt.plot(turn_angles, np.array(resolution_times)/60)
+        plt.title('A turns B left')
+        plt.ylabel('Separation (nm)')
+        plt.xlabel('Turn Angle (deg)')
+        plt.grid()
+        plt.show() 
 
 def erz_2010_test_case_():
 
@@ -471,10 +548,10 @@ def erz_2010_test_case_():
     data = ManeuverData(aircraft_a, aircraft_b)
 
     # Testing for A turns B straight standard maneuver
-    # data.A_turns_B_straight(15) # (TURN DATA WORKING)
+    data.A_turns_B_straight(15) # (TURN DATA WORKING)
 
     # Testing for A straight B turns standard maneuver 
-    data.A_straight_B_turns(15) # (TURN DATA WORKING)
+    # data.A_straight_B_turns(15) # (TURN DATA WORKING)
 
     # Testing for A turns B straight expedited maneuver
     # data.A_turns_B_straight(30) # (TURN DATA WORKING)

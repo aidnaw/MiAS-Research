@@ -209,43 +209,46 @@ class ManeuverData:
 
             #### FIND RESOLUTION DATA ####
 
-            # Get indices for local minima and maxima of straight line separation
-            maxima = signal.argrelmax(np.array(separation_straight))
-            minima = signal.argrelmin(np.array(separation_straight))
+            # Check for any maxima prior to locus merge
+            maximum = signal.argrelmax(np.array(separation_straight)) # Check if there is a local max
+            maximum = maximum[0] # Isolate the index of the max
+            
+            # Try for type 1 resolution
+            if d_tmin >= self.d_req or (maximum.size > 0 and separation_straight[maximum[0]] >= self.d_req):
+                resolution_type = '1'
+                min_separation = min(i for i in separation_straight if i > self.d_req)
+                resolution_index = separation_straight.index(min_separation)
+                resolution_angle = turn_angles[resolution_index]
+                resolution_time = resolution_times[resolution_index]
+                # Check resolution time constraint or if resolution is in unstable region. If violated, switch to 1a solution
+                if resolution_time > 1.2 * turn_time_min or (maximum.size > 0 and resolution_index > maximum[0] and resolution_index < index):
+                    if d_tmin > self.d_req:
+                        resolution_type = '1a'
+                        min_separation = d_tmin
+                        resolution_angle = turn_angle_min
+                        resolution_time = turn_time_min
+                    else: resolution_type = '2'
+            else: resolution_type = '2'
 
-            # Isolate and incorporate flat maximum at min turn angle
-            maxima = maxima[0]
-            if not maxima:
-                maxima = np.array([index])
-                print(maxima)
-            else:
-                maxima = np.array([maxima, index])
-            minima = minima[0]
+            # Find best parameters for type 2 resolutions.
 
-            # Start algorithm on page 235
-            if separation_straight[1] < separation_straight[0]:
-                if turn_angles[minima[0]] == turn_angle_min:
-                    resolution_type = 'Failed'
-            if maxima[0] < index:
-                if separation_straight[maxima[0]] >= self.d_req:
-                    resolution_separation = min(i for i in separation_straight if i > self.d_req)
 
+
+            # Print table data
+            print('A {} B straight'.format(direction))
 
             # Print turn data
-
-            # print('A {} B straight'.format(direction))
             # print('\tMinimum Separation in Turn:')
             # print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
             # print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
             # print('\t\tTime (min):', round(turn_time_min/60, 2))
 
             # Print resolution data
-
-            # print('\tResolution Parameters:')
-            # print('\t\tResolution Type', resolution_type)
-            # print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
-            # print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
-            # print('\t\tResolution Time (min):', round(resolution_time/60, 2))
+            print('\tResolution Parameters:')
+            print('\t\tResolution Type', resolution_type)
+            print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
+            print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
+            print('\t\tResolution Time (min):', round(resolution_time/60, 2))
 
              # Prep plot data
             if i == 0:
@@ -314,18 +317,61 @@ class ManeuverData:
                 else:
                     resolution_times.append(turn_time)
 
-            # Find time to get to min separation overall w/ specified turn angle
-            turn_times = []
-            for turn_angle in turn_angles:
-                turn_times.append(self.b.time_to_turn(turn_angle))
-            resolution_times = []
-            for [j, turn_time] in enumerate(turn_times):
-                if t_smin[j] >= 0:
-                    resolution_times.append(turn_time + t_smin[j])
-                else:
-                    resolution_times.append(turn_time)
+           #### FIND RESOLUTION DATA ####
 
-           
+            # Check for any maxima prior to locus merge
+            maximum = signal.argrelmax(np.array(separation_straight)) # Check if there is a local max
+            maximum = maximum[0] # Isolate the index of the max
+            
+            # Try for type 1 resolution
+            if d_tmin >= self.d_req or (maximum.size > 0 and separation_straight[maximum[0]] >= self.d_req):
+                resolution_type = '1'
+                min_separation = min(i for i in separation_straight if i > self.d_req)
+                resolution_index = separation_straight.index(min_separation)
+                resolution_angle = turn_angles[resolution_index]
+                resolution_time = resolution_times[resolution_index]
+                # Check resolution time constraint or if resolution is in unstable region. If violated, switch to 1a solution
+                if resolution_time > 1.2 * turn_time_min or (maximum.size > 0 and resolution_index > maximum[0] and resolution_index < index):
+                    if d_tmin > self.d_req:
+                        resolution_type = '1a'
+                        min_separation = d_tmin
+                        resolution_angle = turn_angle_min
+                        resolution_time = turn_time_min
+                    else: resolution_type = '2'
+            else: resolution_type = '2'
+
+            # Give best resolution parameters to type 2 solutions
+            if resolution_type == '2':
+                min_separation = d_tmin
+                resolution_time = turn_time_min
+                try:
+                    req_sep = min(i for i in separation[index:] if i > self.d_req)
+                    resolution_index = separation.index(req_sep)
+                except ValueError:
+                    req_sep = np.array([])
+                if req_sep.size > 0:
+                    resolution_type = '2a'
+                    resolution_angle = turn_angles[resolution_index]
+                else:
+                    resolution_type = '2b'
+                    max_turn_separation = max(separation[index:])
+                    resolution_index = separation.index(max_turn_separation)
+                    resolution_angle = turn_angles[resolution_index]
+            
+            # Print table data
+            print('A straight B {}'.format(direction))
+            # Turn Data
+            print('\tMinimum Separation in Turn:')
+            print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
+            print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
+            print('\t\tTime to min separation (min):', round(turn_time_min/60, 2))
+            # Resolution Data
+            print('\tResolution Parameters:')
+            print('\t\tResolution Type', resolution_type)
+            print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
+            print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
+            print('\t\tTime to min separation (min):', round(resolution_time/60, 2))
+
             # Prep plot data
             if i == 0:
                 separation_right = separation
@@ -335,19 +381,6 @@ class ManeuverData:
                 separation_left = separation[::-1]
                 separation_straight_left = separation_straight[::-1]
                 resolution_times_left = resolution_times[::-1]
-            
-            # Print turn data
-            # print('A straight B {}'.format(direction))
-            # print('\tMinimum Separation in Turn:')
-            # print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
-            # print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
-            # print('\t\tTime (min):', round(turn_time_min/60, 2))
-
-            # print('\tResolution Parameters:')
-            # print('\t\tResolution Type', resolution_type)
-            # print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
-            # print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
-            # print('\t\tTime (min):', round(resolution_time/60, 2))
 
         # Plot maneuver data
         separation = np.array(separation_left + separation_right[1::]) / 1852
@@ -408,6 +441,61 @@ class ManeuverData:
                 else:
                     resolution_times.append(turn_time)
 
+            #### FIND RESOLUTION DATA ####
+
+            # Check for any maxima prior to locus merge
+            maximum = signal.argrelmax(np.array(separation_straight)) # Check if there is a local max
+            maximum = maximum[0] # Isolate the index of the max
+            
+            # Try for type 1 resolution
+            if d_tmin >= self.d_req or (maximum.size > 0 and separation_straight[maximum[0]] >= self.d_req):
+                resolution_type = '1'
+                min_separation = min(i for i in separation_straight if i > self.d_req)
+                resolution_index = separation_straight.index(min_separation)
+                resolution_angle = turn_angles[resolution_index]
+                resolution_time = resolution_times[resolution_index]
+                # Check resolution time constraint or if resolution is in unstable region. If violated, switch to 1a solution
+                if resolution_time > 1.2 * turn_time_min or (maximum.size > 0 and resolution_index > maximum[0] and resolution_index < index):
+                    if d_tmin > self.d_req:
+                        resolution_type = '1a'
+                        min_separation = d_tmin
+                        resolution_angle = turn_angle_min
+                        resolution_time = turn_time_min
+                    else: resolution_type = '2'
+            else: resolution_type = '2'
+
+            # Give best resolution parameters to type 2 solutions
+            if resolution_type == '2':
+                min_separation = d_tmin
+                resolution_time = turn_time_min
+                try:
+                    req_sep = min(i for i in separation[index:] if i > self.d_req)
+                    resolution_index = separation.index(req_sep)
+                except ValueError:
+                    req_sep = np.array([])
+                if req_sep.size > 0:
+                    resolution_type = '2a'
+                    resolution_angle = turn_angles[resolution_index]
+                else:
+                    resolution_type = '2b'
+                    max_turn_separation = max(separation[index:])
+                    resolution_index = separation.index(max_turn_separation)
+                    resolution_angle = turn_angles[resolution_index]
+
+            # Print table data
+            print('A {} B right'.format(direction))
+            # Print turn data
+            print('\tMinimum Separation in Turn:')
+            print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
+            print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
+            print('\t\tTime (min):', round(turn_time_min/60, 2))
+            # Prtint resolution data
+            print('\tResolution Parameters:')
+            print('\t\tResolution Type', resolution_type)
+            print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
+            print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
+            print('\t\tTime (min):', round(resolution_time/60, 2))
+
             # Prep plot data
             if i == 0:
                 separation_right = separation
@@ -417,19 +505,6 @@ class ManeuverData:
                 separation_left = separation[::-1]
                 separation_straight_left = separation_straight[::-1]
                 resolution_times_left = resolution_times[::-1]
-
-            # Print turn data
-            # print('A {} B right'.format(direction))
-            # print('\tMinimum Separation in Turn:')
-            # print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
-            # print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
-            # print('\t\tTime (min):', round(turn_time_min/60, 2))
-
-            # print('\tResolution Parameters:')
-            # print('\t\tResolution Type', resolution_type)
-            # print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
-            # print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
-            # print('\t\tTime (min):', round(resolution_time/60, 2))
 
         # Plot maneuver data
         separation = np.array(separation_left + separation_right[1::]) / 1852
@@ -490,6 +565,61 @@ class ManeuverData:
                 else:
                     resolution_times.append(turn_time)
 
+            #### FIND RESOLUTION DATA ####
+
+            # Check for any maxima prior to locus merge
+            maximum = signal.argrelmax(np.array(separation_straight)) # Check if there is a local max
+            maximum = maximum[0] # Isolate the index of the max
+            
+            # Try for type 1 resolution
+            if d_tmin >= self.d_req or (maximum.size > 0 and separation_straight[maximum[0]] >= self.d_req):
+                resolution_type = '1'
+                min_separation = min(i for i in separation_straight if i > self.d_req)
+                resolution_index = separation_straight.index(min_separation)
+                resolution_angle = turn_angles[resolution_index]
+                resolution_time = resolution_times[resolution_index]
+                # Check resolution time constraint or if resolution is in unstable region. If violated, switch to 1a solution
+                if resolution_time > 1.2 * turn_time_min or (maximum.size > 0 and resolution_index > maximum[0] and resolution_index < index):
+                    if d_tmin > self.d_req:
+                        resolution_type = '1a'
+                        min_separation = d_tmin
+                        resolution_angle = turn_angle_min
+                        resolution_time = turn_time_min
+                    else: resolution_type = '2'
+            else: resolution_type = '2'
+
+            # Give best resolution parameters to type 2 solutions
+            if resolution_type == '2':
+                min_separation = d_tmin
+                resolution_time = turn_time_min
+                try:
+                    req_sep = min(i for i in separation[index:] if i > self.d_req)
+                    resolution_index = separation.index(req_sep)
+                except ValueError:
+                    req_sep = np.array([])
+                if req_sep.size > 0:
+                    resolution_type = '2a'
+                    resolution_angle = turn_angles[resolution_index]
+                else:
+                    resolution_type = '2b'
+                    max_turn_separation = max(separation[index:])
+                    resolution_index = separation.index(max_turn_separation)
+                    resolution_angle = turn_angles[resolution_index]
+
+            # Print table data
+            print('A {} B left'.format(direction))
+            # Print turn data
+            print('\tMinimum Separation in Turn:')
+            print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
+            print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
+            print('\t\tTime (min):', round(turn_time_min/60, 2))
+            # Prtint resolution data
+            print('\tResolution Parameters:')
+            print('\t\tResolution Type', resolution_type)
+            print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
+            print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
+            print('\t\tTime (min):', round(resolution_time/60, 2))
+
             # Prep plot data
             if i == 0:
                 separation_right = separation
@@ -499,19 +629,6 @@ class ManeuverData:
                 separation_left = separation[::-1]
                 separation_straight_left = separation_straight[::-1]
                 resolution_times_left = resolution_times[::-1]
-            
-            # Print turn data
-            # print('A {} B left'.format(direction))
-            # print('\tMinimum Separation in Turn:')
-            # print('\t\tMinimum Separation (nmi):', round(d_tmin/1852, 2))
-            # print('\t\tTurn Angle (deg)', round(np.rad2deg(turn_angle_min), 2))
-            # print('\t\tTime (min):', round(turn_time_min/60, 2))
-
-            # print('\tResolution Parameters:')
-            # print('\t\tResolution Type', resolution_type)
-            # print('\t\tMinimum Separation (nmi):', round(min_separation/1852, 2))
-            # print('\t\tResolution Angle (deg)', round(np.rad2deg(resolution_angle), 2))
-            # print('\t\tTime (min):', round(resolution_time/60, 2))
 
         # Plot maneuver data
         separation = np.array(separation_left + separation_right[1::]) / 1852
@@ -548,7 +665,7 @@ def erz_2010_test_case_():
     data = ManeuverData(aircraft_a, aircraft_b)
 
     # Testing for A turns B straight standard maneuver
-    data.A_turns_B_straight(15) # (TURN DATA WORKING)
+    # data.A_turns_B_straight(15) # (TURN DATA WORKING)
 
     # Testing for A straight B turns standard maneuver 
     # data.A_straight_B_turns(15) # (TURN DATA WORKING)
@@ -565,4 +682,43 @@ def erz_2010_test_case_():
     # Testing for A turns B left expedited maneuver
     # data.A_turns_B_left() #(TURN DATA WORKING) (Note: A right slightly innacurate)
 
-erz_2010_test_case_()
+def erz_2010_test_case_2_():
+
+    # Create reference aircraft with set velocity
+    a_speed = 400 # knots
+
+    a_speed_mks = a_speed * 0.514 # m/s
+    aircraft_a = MainAircraft(a_speed_mks)
+
+    # Create conflicting aircraft with set velocity, relative position, and relative heading
+    b_speed = 480 # knots
+    b_position = np.array([4, 5.83]) # nmi
+    b_heading = np.deg2rad(270) # deg
+
+    b_speed_mks = b_speed * 0.514 # m/s
+    b_position_mks = b_position * 1852 # m
+    aircraft_b = ConflictingCraft(b_speed_mks, b_position_mks, b_heading)
+
+    # Create conflict
+    data = ManeuverData(aircraft_a, aircraft_b)
+
+    # Testing for A turns B straight standard maneuver
+    # data.A_turns_B_straight(15) # (TURN DATA WORKING)
+
+    # Testing for A straight B turns standard maneuver 
+    # data.A_straight_B_turns(15) # (TURN DATA WORKING)
+
+    # Testing for A turns B straight expedited maneuver
+    # data.A_turns_B_straight(30) # (TURN DATA WORKING)
+
+    # Testing for A straight B turns expedited maneuver 
+    # data.A_straight_B_turns(30) # (TURN DATA WORKING)
+
+    # Testing for A turns B right expedited maneuver
+    # data.A_turns_B_right() # (TURN DATA WORKING)
+
+    # Testing for A turns B left expedited maneuver
+    # data.A_turns_B_left() #(TURN DATA WORKING) (Note: A right slightly innacurate)
+
+# erz_2010_test_case_()
+erz_2010_test_case_2_()

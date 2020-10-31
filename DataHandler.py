@@ -1,14 +1,14 @@
 def datahandler():
     ''' Function for retrieving data from BlueSky log files. Outputs a dictionary with keys = aircraft number
     and items = subdictionaries. Subdictionary keys = measurement labels and subdictionary items = lists of 
-    corresponding data.
+    corresponding data. Everything in output is in string format.
     - Aidan Wallace, University of MD College Park, 2020 '''
 
     # Prompt user to specify file for analysis
-    f = input('Input BlueSky log file for data analysis:')
+    # f = input('Input BlueSky log file for data analysis:')
 
     # Read in log file
-    with open(f) as file:
+    with open('TESTLOG_00_Custom Log_20201031_08-02-07.log') as file:
         rawtag = file.readline()
         rawlabels = file.readline()
         rawdata = file.readlines()
@@ -25,13 +25,13 @@ def datahandler():
     formatted_data = []
     for line in cleaned_data:
         newline = line.split()
-        newline = [float(i) for i in newline]
         formatted_data.append(newline)
 
     # Find how many aircraft are on the log
-    acno = 0
-    for entry in formatted_data:
-        if entry[0] == 0: acno +=1
+    acno = 1
+    previousentry = formatted_data[0]
+    for entry in formatted_data[1::]:
+        if entry[0] == previousentry[0]: acno += 1
         else: break
 
     # Parse data into the logs for each individual aircraft
@@ -49,4 +49,7 @@ def datahandler():
         for varno, label in enumerate(labels):
                 data[aircraft].setdefault(label, [item[varno] for item in acdata_list[acno]])
 
-datahandler()
+    return data
+
+data = datahandler()
+print(data['Aircraft 1']['tas'])

@@ -47,7 +47,7 @@ def datahandler():
     # Populate the data dictionary
     for acno, aircraft in enumerate(data.keys()):
         for varno, label in enumerate(labels):
-                data[aircraft].setdefault(label, [item[varno] for item in acdata_list[acno]])
+            data[aircraft].setdefault(label, [item[varno] for item in acdata_list[acno]])
 
     return data
 

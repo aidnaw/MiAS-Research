@@ -5,10 +5,10 @@ def datahandler():
     - Aidan Wallace, University of MD College Park, 2020 '''
 
     # Prompt user to specify file for analysis
-    # f = input('Input BlueSky log file for data analysis:')
+    f = input('Input BlueSky log file for data analysis:')
 
     # Read in log file
-    with open('TESTLOG_00_Custom Log_20201031_08-02-07.log') as file:
+    with open(f) as file:
         rawtag = file.readline()
         rawlabels = file.readline()
         rawdata = file.readlines()
